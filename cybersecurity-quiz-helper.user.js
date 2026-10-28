@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         问卷星·2026网络安全知识竞赛题库助手
 // @namespace    local.wjx.cybersecurity
-// @version      1.0.0
-// @description  内置用户提供的69题参考题库；按题干和选项文字匹配，点击后填写，不自动提交。
+// @version      1.0.1
+// @description  南京晓庄学院网络安全知识竞赛参考题库助手；仅在指定问卷星页面生效，不自动提交。
 // @match        https://ks.wjx.com/vm/ep8c2Pw.aspx*
 // @run-at       document-idle
 // @grant        none
