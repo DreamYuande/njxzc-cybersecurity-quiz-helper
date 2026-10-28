@@ -7,7 +7,7 @@
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。
-2. [安装用户脚本](https://github.com/DreamYuande/wjx-cybersecurity-quiz-helper/raw/refs/heads/main/cybersecurity-quiz-helper.user.js)，并在扩展中确认安装。
+2. [安装用户脚本](https://github.com/DreamYuande/njxzc-cybersecurity-quiz-helper/raw/refs/heads/main/cybersecurity-quiz-helper.user.js)，并在扩展中确认安装。
 3. 打开脚本指定的问卷星页面：`https://ks.wjx.com/vm/ep8c2Pw.aspx`。
 
 ## 使用
