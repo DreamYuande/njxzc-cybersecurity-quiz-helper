@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         问卷星·2026网络安全知识竞赛题库助手
 // @namespace    local.wjx.cybersecurity
-// @version      1.1.0
-// @description  南京晓庄学院网络安全知识竞赛参考题库助手；保存基本信息，刷新后快速作答并按设置自动提交，仅在指定页面生效。
+// @version      1.2.0
+// @description  南京晓庄学院网络安全知识竞赛参考题库助手；刷新自动填写，可设置提交秒数和自动提交开关，仅在指定页面生效。
 // @match        https://ks.wjx.com/vm/ep8c2Pw.aspx*
 // @run-at       document-idle
 // @grant        none
@@ -87,7 +87,7 @@
   // 也可在此填写默认值；界面保存的设置优先，仅保存在当前浏览器。
   const DEFAULT_SETTINGS = {
     studentId: '', name: '', department: '', identity: '',
-    autoAnswer: true, autoSubmit: true
+    autoAnswer: true, autoSubmit: true, submitSeconds: 10
   };
   const STORAGE_KEY = 'njxzc-cybersecurity-quiz-helper:settings:v1';
   const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -115,22 +115,24 @@
       strong{font-size:14px}button,input,select{font:inherit}button{cursor:pointer;border:0;border-radius:9px;padding:8px 10px;background:#eef2fa;color:#254674}
       button:disabled{opacity:.5;cursor:default}.fold{padding:0 7px;background:transparent;font-size:20px}.body{padding:12px}.note{font-size:12px;color:#6a7690;margin-bottom:10px}
       .profile{display:grid;gap:7px;margin-bottom:10px}.profile label{display:grid;grid-template-columns:65px 1fr;align-items:center;gap:6px;font-size:12px}
-      input[type=text],select{width:100%;min-width:0;padding:6px;border:1px solid #dbe3f3;border-radius:6px;background:#fff;color:#20304c}
+      input[type=text],input[type=number],select{width:100%;min-width:0;padding:6px;border:1px solid #dbe3f3;border-radius:6px;background:#fff;color:#20304c}
       .switch{display:block;margin:6px 0;font-size:12px}.switch input{vertical-align:middle}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.primary{background:#3568df;color:white}
       .status{margin:10px 0;white-space:pre-wrap;font-size:13px}details{border-top:1px solid #edf0f6;padding-top:7px;font-size:12px}summary{cursor:pointer}.list{max-height:180px;overflow:auto;margin-top:8px;overflow-wrap:anywhere}
       .item{margin-bottom:10px}.ok{color:#24704e}.bad{color:#a45911}.hidden{display:none}
       @media(max-width:600px){:host{right:8px;top:65px}.card{width:270px}.body{padding:10px}.list{max-height:130px}}
     </style>
     <div class="card"><header><strong>晓庄网络安全 · 题库助手</strong><button class="fold" title="收起/展开">−</button></header>
-      <div class="body"><div class="note">保存基本信息后可在刷新时自动作答和提交。设置保存在当前浏览器，可随时修改或清除。</div>
+      <div class="body"><div class="note">保存基本信息后，刷新自动填写；可选择自动提交及提交用时。设置保存在当前浏览器。</div>
         <div class="profile">
           <label>学工号<input id="studentId" type="text" autocomplete="off"></label>
           <label>姓名<input id="name" type="text" autocomplete="off"></label>
           <label>学院部门<select id="department"><option value="">请选择</option></select></label>
           <label>您的身份<select id="identity"><option value="">请选择</option></select></label>
+          <label>提交用时<input id="submitSeconds" type="number" min="0" max="3600" step="0.1" value="10" aria-label="提交用时（秒）"></label>
         </div>
+        <div class="note">单位：秒（0–3600）。从本轮开始填写时计时；0 表示核对完成后立即提交。等待期间可点击“停止”取消。</div>
         <label class="switch"><input type="checkbox" id="autoAnswer">刷新后自动作答</label>
-        <label class="switch"><input type="checkbox" id="autoSubmit">填写并核对完成后自动提交</label>
+        <label class="switch"><input type="checkbox" id="autoSubmit">按设置秒数自动提交</label>
         <div class="actions"><button id="save">保存设置</button><button class="primary" id="fill">保存并作答</button><button id="scan">仅检查</button><button id="stop" disabled>停止</button><button id="clear">清除设置</button></div>
         <div class="status" role="status" aria-live="polite">正在等待页面加载…</div>
         <details><summary>匹配详情</summary><div class="list"></div></details>
@@ -184,17 +186,29 @@
     }
     for (const key of profileKeys) root.querySelector('#' + key).value = String(settings[key] || '');
     for (const key of switchKeys) root.querySelector('#' + key).checked = settings[key] === true;
+    root.querySelector('#submitSeconds').value = String(settings.submitSeconds);
   }
 
   function readSettings() {
     const values = {};
     for (const key of profileKeys) values[key] = root.querySelector('#' + key).value.trim();
     for (const key of switchKeys) values[key] = root.querySelector('#' + key).checked;
+    values.submitSeconds = validateSubmitSeconds(root.querySelector('#submitSeconds').value);
     return values;
   }
 
+  function validateSubmitSeconds(value) {
+    const seconds = Number(value);
+    if (String(value).trim() === '' || !Number.isFinite(seconds) || seconds < 0 || seconds > 3600) {
+      throw new Error('提交用时需填写 0–3600 之间的秒数');
+    }
+    return seconds;
+  }
+
   function saveSettings() {
-    const values = readSettings();
+    let values;
+    try { values = readSettings(); }
+    catch (error) { status.textContent = error.message; return false; }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
       settings = values;
@@ -324,14 +338,36 @@
     if (errors.length) throw new Error('页面提示填写错误：' + errors[0].textContent.trim());
   }
 
+  function verifyCompleted(items, values) {
+    verifyProfile(values);
+    const current = collect();
+    if (current.length !== items.length || current.some((item, index) =>
+        item.field !== items[index].field || item.question !== items[index].question ||
+        item.result.error || !verifyQuestion(item))) throw new Error('题目或选中状态已发生变化，未自动提交');
+    checkRequiredFields(current);
+  }
+
+  async function waitForSubmission(startedAt, seconds, done) {
+    const deadline = startedAt + seconds * 1000;
+    let remaining;
+    while ((remaining = deadline - performance.now()) > 0) {
+      checkStopped();
+      status.textContent = `基本信息及 ${done} 题已填写并核对。距自动提交还有 ${(remaining / 1000).toFixed(1)} 秒。\n点击“停止”可取消提交。`;
+      await new Promise(resolve => setTimeout(resolve, Math.min(100, remaining)));
+    }
+    checkStopped();
+  }
+
   async function fill() {
     if (busy || submitAttempted) return;
     setBusy(true);
     stop = false;
     list.replaceChildren();
     const values = { ...settings };
+    const startedAt = performance.now();
     let done = 0;
     try {
+      const seconds = values.autoSubmit ? validateSubmitSeconds(values.submitSeconds) : 0;
       fillProfile(values);
       // 身份切换可能调整显示题目，等待本轮页面事件完成后再收集。
       await nextTurn();
@@ -349,13 +385,10 @@
       checkStopped();
       const failed = results.length - done;
       if (failed) throw new Error(`${failed} 题未通过核对，未自动提交`);
-      verifyProfile(values);
-      const current = collect();
-      if (current.length !== items.length || current.some((item, index) =>
-          item.field !== items[index].field || item.question !== items[index].question ||
-          item.result.error || !verifyQuestion(item))) throw new Error('题目或选中状态已发生变化，未自动提交');
-      checkRequiredFields(current);
+      verifyCompleted(items, values);
       if (values.autoSubmit) {
+        await waitForSubmission(startedAt, seconds, done);
+        verifyCompleted(items, values);
         const button = document.getElementById('ctlNext');
         if (!visible(button) || button.disabled || button.getAttribute('aria-disabled') === 'true') {
           throw new Error('提交按钮尚不可用，请按页面提示处理');
@@ -380,9 +413,10 @@
   clearButton.addEventListener('click', () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
-      settings = { studentId: '', name: '', department: '', identity: '', autoAnswer: false, autoSubmit: false };
+      settings = { studentId: '', name: '', department: '', identity: '', autoAnswer: false, autoSubmit: false, submitSeconds: DEFAULT_SETTINGS.submitSeconds };
       for (const key of profileKeys) root.querySelector('#' + key).value = '';
       for (const key of switchKeys) root.querySelector('#' + key).checked = false;
+      root.querySelector('#submitSeconds').value = String(settings.submitSeconds);
       status.textContent = '已清除保存的设置，当前页面的已填内容可自行修改。';
     } catch (_) { status.textContent = '无法清除设置，请检查浏览器本地存储权限。'; }
   });
